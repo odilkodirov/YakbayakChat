@@ -2,6 +2,10 @@ package tj.yakbayak.chat;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.os.Bundle;
 import android.os.Build;
 import android.webkit.WebView;
@@ -9,15 +13,42 @@ import android.webkit.WebSettings;
 import android.webkit.WebChromeClient;
 import android.webkit.PermissionRequest;
 import android.webkit.WebViewClient;
+import android.webkit.JavascriptInterface;
 import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.view.ViewGroup;
+import android.content.Context;
 
 public class MainActivity extends Activity {
   private WebView web;
   private PermissionRequest pendingRequest;
   private static final int MIC_REQUEST = 41;
+  private static final String CHANNEL_ID = "yakbayak_chat_messages";
+
+  public class NativeBridge {
+    @JavascriptInterface public void notify(String title, String message) {
+      runOnUiThread(() -> showMessageNotification(title, message));
+    }
+  }
+
+  private void showMessageNotification(String title, String message) {
+    NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+    if (Build.VERSION.SDK_INT >= 26) {
+      NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Сообщения Якбаяк CHAT", NotificationManager.IMPORTANCE_HIGH);
+      channel.setDescription("Уведомления о новых сообщениях");
+      nm.createNotificationChannel(channel);
+    }
+    Intent intent = new Intent(this, MainActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    PendingIntent pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
+    Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL_ID) : new Notification.Builder(this);
+    builder.setSmallIcon(android.R.drawable.stat_notify_chat)
+      .setContentTitle(title == null ? "Якбаяк CHAT" : title)
+      .setContentText(message == null ? "Новое сообщение" : message)
+      .setAutoCancel(true).setContentIntent(pi).setPriority(Notification.PRIORITY_HIGH);
+    nm.notify((int)(System.currentTimeMillis() & 0x7fffffff), builder.build());
+  }
 
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -30,6 +61,7 @@ public class MainActivity extends Activity {
     s.setAllowFileAccess(true);
     s.setMediaPlaybackRequiresUserGesture(false);
     if (Build.VERSION.SDK_INT >= 21) s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+    web.addJavascriptInterface(new NativeBridge(), "YakbayakNative");
     web.setWebViewClient(new WebViewClient());
     web.setWebChromeClient(new WebChromeClient() {
       @Override public void onPermissionRequest(PermissionRequest request) {
