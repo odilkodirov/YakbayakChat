@@ -11,15 +11,15 @@
 <script>
 const firebaseConfig={apiKey:"AIzaSyAgbRlIGHEowpn5ihqgEukEXkUIEVgmtWQ",authDomain:"yakbayakchat-ea5a7.firebaseapp.com",databaseURL:"https://yakbayakchat-ea5a7-default-rtdb.firebaseio.com",projectId:"yakbayakchat-ea5a7",storageBucket:"yakbayakchat-ea5a7.firebasestorage.app",messagingSenderId:"53495605395",appId:"1:53495605395:android:027f7b79ae0a4f23458566"};
 firebase.initializeApp(firebaseConfig);
-const auth=firebase.auth(),db=firebase.firestore(),rtdb=firebase.database();
+const auth=firebase.auth(),db=firebase.firestore();
 const $=id=>document.getElementById(id);
-let myName=localStorage.getItem('yb_name')||'',myId=localStorage.getItem('yb_uid')||'',room='all',messages=[],users=[],messageUnsub=null,usersUnsub=null;
+let myName=localStorage.getItem('yb_name')||'',myId=localStorage.getItem('yb_uid')||'',room='all',messages=[],users=[],messageUnsub=null,usersUnsub=null,presenceTimer=null;
 $('server').parentElement.style.display='none';$('help').style.display='none';$('status').textContent='Подключение к облаку…';
 if(myName)$('register').classList.add('hidden');
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function roomId(uid){return 'dm:'+[myId,uid].sort().join(':')}
 function drawPeople(){
- const list=[{id:'all',name:'Общий чат',desc:'Общий чат'}].concat(users.filter(u=>u.id!==myId).map(u=>({id:roomId(u.id),name:u.name,desc:u.online?'В сети':'Не в сети',online:!!u.online})));
+ const list=[{id:'all',name:'Общий чат',desc:'Общий чат'}].concat(users.filter(u=>u.id!==myId).map(u=>({id:roomId(u.id),name:u.name,desc:(Date.now()-(u.lastSeen||0)<90000)?'В сети':'Не в сети',online:(Date.now()-(u.lastSeen||0)<90000)})));
  $('people').innerHTML=list.map(r=>'<div class="person '+(r.id===room?'active':'')+'" data-id="'+esc(r.id)+'"><b>'+(r.id==='all'?'💬 ':'')+esc(r.name)+'</b><small>'+(r.id==='all'?'Все участники':'<span class="'+(r.online?'online-dot':'offline-dot')+'"></span>'+esc(r.desc))+'</small></div>').join('');
  document.querySelectorAll('.person').forEach(el=>el.onclick=()=>{room=el.dataset.id;watchMessages();drawPeople()});
 }
@@ -29,14 +29,18 @@ function render(){
  $('messages').scrollTop=$('messages').scrollHeight;
 }
 function watchMessages(){if(messageUnsub)messageUnsub();messageUnsub=db.collection('messages').where('room','==',room).onSnapshot(s=>{messages=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).slice(-150);render()},e=>{$('status').textContent='Ошибка базы';console.error(e)})}
-function watchUsers(){if(usersUnsub)usersUnsub();usersUnsub=db.collection('users').onSnapshot(async s=>{users=s.docs.map(d=>Object.assign({id:d.id},d.data()));for(const u of users){try{const p=await rtdb.ref('status/'+u.id).once('value');u.online=!!(p.val()&&p.val().state==='online')}catch(e){u.online=false}}render()})}
+function watchUsers(){if(usersUnsub)usersUnsub();usersUnsub=db.collection('users').onSnapshot(s=>{users=s.docs.map(d=>Object.assign({id:d.id},d.data()));render()})}
 async function connectCloud(){
  try{
   if(!auth.currentUser)await auth.signInAnonymously();
   myId=auth.currentUser.uid;localStorage.setItem('yb_uid',myId);
   if(!myName){$('register').classList.remove('hidden');return}
-  await db.collection('users').doc(myId).set({name:myName,updatedAt:Date.now()},{merge:true});
-  rtdb.ref('.info/connected').on('value',snap=>{if(snap.val()===true){const status=rtdb.ref('status/'+myId);status.onDisconnect().set({state:'offline',last_changed:firebase.database.ServerValue.TIMESTAMP});status.set({state:'online',last_changed:firebase.database.ServerValue.TIMESTAMP})}});
+  const userRef=db.collection('users').doc(myId);
+  const beat=()=>userRef.set({name:myName,lastSeen:Date.now(),updatedAt:Date.now()},{merge:true}).catch(e=>console.error(e));
+  await beat();
+  if(presenceTimer)clearInterval(presenceTimer);
+  presenceTimer=setInterval(beat,30000);
+  window.addEventListener('beforeunload',()=>userRef.set({lastSeen:Date.now()-120000},{merge:true}).catch(()=>{}));
   $('status').textContent='В сети';$('status').style.background='#245b45';document.body.classList.add('connected');watchUsers();watchMessages();
  }catch(e){$('status').textContent='Ошибка Firebase';$('help').style.display='block';$('help').textContent='Firebase: '+e.message;console.error(e)}
 }
