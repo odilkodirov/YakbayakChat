@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "53495605395",
+    "project_id": "yakbayakchat-ea5a7",
+    "storage_bucket": "yakbayakchat-ea5a7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:53495605395:android:027f7b79ae0a4f23458566",
+        "android_client_info": {
+          "package_name": "tj.yakbayak.chat"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgbRlIGHEowpn5ihqgEukEXkUIEVgmtWQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
